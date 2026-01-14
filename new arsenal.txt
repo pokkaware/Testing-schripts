@@ -1,0 +1,491 @@
+--[[
+    PandazWare Hybrid: OffenseWare x Binxix
+    - Aimbot/FOV/Lock: OffenseWare
+    - Fly: OffenseWare
+    - Gun Mods: OffenseWare
+    - ESP/Visuals: Binxix
+]]
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+
+-- // 1. LIBRARY LADEN //
+local LibraryURL = "https://raw.githubusercontent.com/PandazWare/PandazWare/refs/heads/main/PandazWare%20libary"
+local success, PandazWare = pcall(function()
+    return loadstring(game:HttpGet(LibraryURL))()
+end)
+
+if not success or not PandazWare then return warn("Lib failed") end
+
+-- // GLOBAL CONFIG //
+getgenv().Config = {
+    -- OffenseWare Aimbot Settings
+    Aimbot = {
+        Enabled = false,
+        FOV = 120,
+        Smoothing = 0.5,
+        WallCheck = true,
+        Parts = {
+            Head = true,
+            UpperTorso = false,
+            HumanoidRootPart = false
+        }
+    },
+    -- OffenseWare Fly Settings
+    Fly = {
+        Enabled = false,
+        Speed = 50
+    },
+    -- OffenseWare Gun Settings
+    Gun = {
+        InfAmmo = false,
+        FastFire = false,
+        NoRecoil = false
+    },
+    -- Binxix ESP Settings
+    ESP = {
+        Enabled = false,
+        Box = true,
+        Skeleton = true,
+        Tracers = false,
+        Name = false,
+        Health = false,
+        Distance = false,
+        HeadDot = false,
+        OffscreenArrows = false
+    },
+    -- Binxix Visuals
+    Visuals = {
+        Fullbright = false,
+        NoFog = false
+    }
+}
+
+-- // UTILS //
+local function IsEnemy(plr)
+    if not plr or not plr.Team then return true end
+    return plr.Team ~= LocalPlayer.Team
+end
+
+-- // OFFENSEWARE AIMBOT LOGIC //
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Visible = false
+FOVCircle.Color = Color3.fromRGB(170, 60, 255)
+FOVCircle.Thickness = 1.5
+FOVCircle.NumSides = 24
+FOVCircle.Filled = false
+
+local function IsVisible(targetPart)
+    if not Config.Aimbot.WallCheck then return true end
+    local origin = Camera.CFrame.Position
+    local direction = targetPart.Position - origin
+    local params = RaycastParams.new()
+    params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+    params.FilterType = Enum.RaycastFilterType.Exclude
+    params.IgnoreWater = true
+    local result = Workspace:Raycast(origin, direction, params)
+    return not result or result.Instance:IsDescendantOf(targetPart.Parent)
+end
+
+local function GetClosestTarget()
+    local closest, shortest = nil, math.huge
+    local mouse = UserInputService:GetMouseLocation()
+    
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and IsEnemy(v) and v.Character then
+            -- Check enabled parts (OffenseWare Multi-Aim Logic)
+            for partName, enabled in pairs(Config.Aimbot.Parts) do
+                if enabled then
+                    local part = v.Character:FindFirstChild(partName)
+                    local hum = v.Character:FindFirstChild("Humanoid")
+                    
+                    if part and hum and hum.Health > 0 then
+                        local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                        if onScreen then
+                            local dist = (Vector2.new(pos.X, pos.Y) - mouse).Magnitude
+                            -- OffenseWare Priority Logic
+                            if dist < shortest and dist <= Config.Aimbot.FOV then
+                                if IsVisible(part) then
+                                    closest = part
+                                    shortest = dist
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    -- FOV Circle Update
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+    FOVCircle.Radius = Config.Aimbot.FOV
+    FOVCircle.Visible = Config.Aimbot.Enabled
+
+    -- Aimbot Execution
+    if Config.Aimbot.Enabled then
+        local target = GetClosestTarget()
+        if target then
+            -- OffenseWare Smoothing
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, target.Position), Config.Aimbot.Smoothing)
+        end
+    end
+end)
+--[[
+    PandazWare Hybrid: OffenseWare x Binxix
+    PART 2: Fly & Gun Mods (OffenseWare Logic)
+]]
+
+-- // OFFENSEWARE FLY //
+local fbv, fbg
+local function ToggleFly(s)
+    if s then
+        if not LocalPlayer.Character or not LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then return end
+        local hrp = LocalPlayer.Character.HumanoidRootPart
+        
+        fbv = Instance.new("BodyVelocity", hrp)
+        fbv.MaxForce = Vector3.new(1e5,1e5,1e5)
+        
+        fbg = Instance.new("BodyGyro", hrp)
+        fbg.MaxTorque = Vector3.new(1e5,1e5,1e5)
+        
+        LocalPlayer.Character.Humanoid.PlatformStand = true
+    else
+        if fbv then fbv:Destroy() end
+        if fbg then fbg:Destroy() end
+        if LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then 
+            LocalPlayer.Character.Humanoid.PlatformStand = false 
+        end
+    end
+end
+
+RunService.Heartbeat:Connect(function()
+    if Config.Fly.Enabled and fbv and fbg then
+        local cam = workspace.CurrentCamera
+        local mv = LocalPlayer.Character.Humanoid.MoveDirection
+        -- OffenseWare Direction Logic
+        local fd = (cam.CFrame.LookVector * mv.Z * -1) + (cam.CFrame.RightVector * mv.X)
+        fbv.Velocity = mv.Magnitude == 0 and Vector3.zero or fd * Config.Fly.Speed
+        fbg.CFrame = cam.CFrame
+    end
+end)
+
+-- // OFFENSEWARE GUN MODS //
+task.spawn(function()
+    local wkspc = ReplicatedStorage:WaitForChild("wkspc", 5)
+    local Weapons = ReplicatedStorage:WaitForChild("Weapons", 5)
+    
+    while task.wait(1.5) do
+        if Config.Gun.InfAmmo or Config.Gun.FastFire or Config.Gun.NoRecoil then
+            pcall(function()
+                -- 1. Infinite Ammo (OffenseWare Method: CurrentCurse Value)
+                if Config.Gun.InfAmmo and wkspc and wkspc:FindFirstChild("CurrentCurse") then 
+                    if wkspc.CurrentCurse.Value ~= "Infinite Ammo" then 
+                        wkspc.CurrentCurse.Value = "Infinite Ammo" 
+                    end 
+                end
+
+                -- 2. Recoil & FireRate (OffenseWare Method: Weapons Folder Iteration)
+                if Weapons then 
+                    for _, v in ipairs(Weapons:GetChildren()) do
+                        if Config.Gun.FastFire then 
+                            local fr = v:FindFirstChild("FireRate")
+                            if fr and fr.Value > 0.04 then fr.Value = 0.04 end
+                            local a = v:FindFirstChild("Auto")
+                            if a then a.Value = true end 
+                        end
+                        
+                        if Config.Gun.NoRecoil then 
+                            local rc = v:FindFirstChild("RecoilControl")
+                            if rc and rc.Value ~= 0 then rc.Value = 0 end
+                            local sp = v:FindFirstChild("Spread")
+                            if sp and sp.Value ~= 0 then sp.Value = 0 end 
+                        end
+                    end 
+                end
+            end)
+        end
+    end
+end)
+--[[
+    PandazWare Hybrid: OffenseWare x Binxix
+    PART 3: Binxix Clean ESP Logic
+]]
+
+local ESP_Storage = {}
+local Colors = {
+    ESP_Visible = Color3.fromRGB(0, 255, 200),
+    ESP_Hidden = Color3.fromRGB(255, 80, 80),
+    Skeleton = Color3.fromRGB(255, 255, 255),
+    Box = Color3.fromRGB(255, 180, 50)
+}
+
+local SKELETON_CONNECTIONS = {
+    {"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"},
+    {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"},
+    {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"},
+    {"LowerTorso", "LeftUpperLeg"}, {"LeftUpperLeg", "LeftLowerLeg"}, {"LeftLowerLeg", "LeftFoot"},
+    {"LowerTorso", "RightUpperLeg"}, {"RightUpperLeg", "RightLowerLeg"}, {"RightLowerLeg", "RightFoot"},
+}
+
+local function worldToScreen(pos)
+    local point, onScreen = Camera:WorldToViewportPoint(pos)
+    return Vector2.new(point.X, point.Y), onScreen
+end
+
+local function drawLine(frame, p1, p2, color, thickness)
+    local distance = (p2 - p1).Magnitude
+    local center = (p1 + p2) / 2
+    local angle = math.atan2(p2.Y - p1.Y, p2.X - p1.X)
+    frame.Size = UDim2.new(0, distance, 0, thickness or 1)
+    frame.Position = UDim2.new(0, center.X, 0, center.Y)
+    frame.Rotation = math.deg(angle)
+    frame.BackgroundColor3 = color
+    frame.Visible = true
+end
+
+local function CreateESP(plr)
+    if ESP_Storage[plr] then return end
+    
+    local ScreenFolder = Instance.new("Folder", game.CoreGui)
+    ScreenFolder.Name = "BinxixESP_"..plr.Name
+    
+    -- Main Holder
+    local Holder = Instance.new("Frame", ScreenFolder)
+    Holder.BackgroundTransparency = 1
+    Holder.Size = UDim2.new(1,0,1,0)
+    
+    -- Skeleton Lines (Pool)
+    local SkeletonLines = {}
+    for i=1, 15 do
+        local l = Instance.new("Frame", Holder)
+        l.BorderSizePixel = 0
+        l.Visible = false
+        table.insert(SkeletonLines, l)
+    end
+    
+    -- Box Corners (8 lines for corner box style)
+    local BoxLines = {}
+    for i=1, 8 do
+        local l = Instance.new("Frame", Holder)
+        l.BorderSizePixel = 0
+        l.Visible = false
+        table.insert(BoxLines, l)
+    end
+    
+    -- Labels
+    local InfoLabel = Instance.new("TextLabel", Holder)
+    InfoLabel.BackgroundTransparency = 1
+    InfoLabel.TextColor3 = Color3.new(1,1,1)
+    InfoLabel.TextStrokeTransparency = 0
+    InfoLabel.TextSize = 11
+    InfoLabel.Font = Enum.Font.GothamBold
+    InfoLabel.Visible = false
+    
+    -- Health Bar
+    local HBarBG = Instance.new("Frame", Holder)
+    HBarBG.BackgroundColor3 = Color3.new(0,0,0)
+    HBarBG.BorderSizePixel = 0
+    HBarBG.Visible = false
+    local HBarFill = Instance.new("Frame", HBarBG)
+    HBarFill.BackgroundColor3 = Color3.new(0,1,0)
+    HBarFill.BorderSizePixel = 0
+    
+    -- Tracer
+    local Tracer = Instance.new("Frame", Holder)
+    Tracer.BorderSizePixel = 0
+    Tracer.Visible = false
+    
+    -- Head Dot
+    local HeadDot = Instance.new("Frame", Holder)
+    HeadDot.Size = UDim2.new(0,4,0,4)
+    HeadDot.BackgroundColor3 = Colors.ESP_Visible
+    HeadDot.Visible = false
+    Instance.new("UICorner", HeadDot).CornerRadius = UDim.new(1,0)
+
+    ESP_Storage[plr] = {
+        Folder = ScreenFolder, Skel = SkeletonLines, Box = BoxLines, 
+        Info = InfoLabel, HBar = {BG = HBarBG, Fill = HBarFill}, 
+        Tracer = Tracer, Dot = HeadDot
+    }
+end
+
+local function UpdateESP()
+    for plr, data in pairs(ESP_Storage) do
+        local shouldShow = Config.ESP.Enabled and IsEnemy(plr) and plr.Character
+        
+        if not shouldShow then
+            data.Folder.Parent = nil
+        else
+            data.Folder.Parent = game.CoreGui
+            local char = plr.Character
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local head = char:FindFirstChild("Head")
+            local hum = char:FindFirstChild("Humanoid")
+            
+            if hrp and head and hum and hum.Health > 0 then
+                local hrpPos, onScreen = worldToScreen(hrp.Position)
+                local headPos = worldToScreen(head.Position + Vector3.new(0, 0.5, 0))
+                local footPos = worldToScreen(hrp.Position - Vector3.new(0, 3, 0))
+                local color = IsVisible(head) and Colors.ESP_Visible or Colors.ESP_Hidden
+                
+                -- Box (Binxix Corner Style)
+                if Config.ESP.Box and onScreen then
+                    local height = math.abs(footPos.Y - headPos.Y)
+                    local width = height * 0.6
+                    local tl = Vector2.new(hrpPos.X - width/2, headPos.Y)
+                    local tr = Vector2.new(hrpPos.X + width/2, headPos.Y)
+                    local bl = Vector2.new(hrpPos.X - width/2, footPos.Y)
+                    local br = Vector2.new(hrpPos.X + width/2, footPos.Y)
+                    local cornerSize = width * 0.25
+                    
+                    -- Update lines (Simplified for brevity, creating corners)
+                    local lines = data.Box
+                    -- Top Left
+                    lines[1].Position = UDim2.new(0, tl.X, 0, tl.Y); lines[1].Size = UDim2.new(0, cornerSize, 0, 1); lines[1].Visible = true
+                    lines[2].Position = UDim2.new(0, tl.X, 0, tl.Y); lines[2].Size = UDim2.new(0, 1, 0, cornerSize); lines[2].Visible = true
+                    -- Top Right
+                    lines[3].Position = UDim2.new(0, tr.X - cornerSize, 0, tr.Y); lines[3].Size = UDim2.new(0, cornerSize, 0, 1); lines[3].Visible = true
+                    lines[4].Position = UDim2.new(0, tr.X, 0, tr.Y); lines[4].Size = UDim2.new(0, 1, 0, cornerSize); lines[4].Visible = true
+                    -- Bottom Left
+                    lines[5].Position = UDim2.new(0, bl.X, 0, bl.Y); lines[5].Size = UDim2.new(0, cornerSize, 0, 1); lines[5].Visible = true
+                    lines[6].Position = UDim2.new(0, bl.X, 0, bl.Y - cornerSize); lines[6].Size = UDim2.new(0, 1, 0, cornerSize); lines[6].Visible = true
+                    -- Bottom Right
+                    lines[7].Position = UDim2.new(0, br.X - cornerSize, 0, br.Y); lines[7].Size = UDim2.new(0, cornerSize, 0, 1); lines[7].Visible = true
+                    lines[8].Position = UDim2.new(0, br.X, 0, br.Y - cornerSize); lines[8].Size = UDim2.new(0, 1, 0, cornerSize); lines[8].Visible = true
+                    
+                    for _,l in pairs(lines) do l.BackgroundColor3 = color end
+                else
+                    for _,l in pairs(data.Box) do l.Visible = false end
+                end
+                
+                -- Skeleton
+                if Config.ESP.Skeleton and onScreen then
+                    for i, link in ipairs(SKELETON_CONNECTIONS) do
+                        local p1 = char:FindFirstChild(link[1])
+                        local p2 = char:FindFirstChild(link[2])
+                        local line = data.Skel[i]
+                        if p1 and p2 and line then
+                            local v1, os1 = worldToScreen(p1.Position)
+                            local v2, os2 = worldToScreen(p2.Position)
+                            if os1 and os2 then
+                                drawLine(line, v1, v2, Colors.Skeleton)
+                            else
+                                line.Visible = false
+                            end
+                        end
+                    end
+                else
+                    for _,l in pairs(data.Skel) do l.Visible = false end
+                end
+                
+                -- Labels
+                if (Config.ESP.Name or Config.ESP.Distance) and onScreen then
+                    local txt = ""
+                    if Config.ESP.Name then txt = plr.Name end
+                    if Config.ESP.Distance then txt = txt .. string.format(" [%dm]", (hrp.Position - Camera.CFrame.Position).Magnitude) end
+                    data.Info.Text = txt
+                    data.Info.Position = UDim2.new(0, hrpPos.X - 50, 0, headPos.Y - 20)
+                    data.Info.Size = UDim2.new(0, 100, 0, 15)
+                    data.Info.Visible = true
+                else
+                    data.Info.Visible = false
+                end
+                
+                -- Health
+                if Config.ESP.Health and onScreen then
+                    local hp = math.clamp(hum.Health / hum.MaxHealth, 0, 1)
+                    local height = math.abs(footPos.Y - headPos.Y)
+                    data.HBar.BG.Position = UDim2.new(0, hrpPos.X - (height*0.3) - 5, 0, headPos.Y)
+                    data.HBar.BG.Size = UDim2.new(0, 2, 0, height)
+                    data.HBar.Fill.Size = UDim2.new(1, 0, hp, 0)
+                    data.HBar.Fill.Position = UDim2.new(0,0, 1-hp, 0)
+                    data.HBar.Fill.BackgroundColor3 = Color3.fromHSV(hp*0.3, 1, 1)
+                    data.HBar.BG.Visible = true
+                else
+                    data.HBar.BG.Visible = false
+                end
+                
+                -- Head Dot
+                if Config.ESP.HeadDot and onScreen then
+                    local hPos, hOS = worldToScreen(head.Position)
+                    data.Dot.Position = UDim2.new(0, hPos.X-2, 0, hPos.Y-2)
+                    data.Dot.BackgroundColor3 = color
+                    data.Dot.Visible = true
+                else
+                    data.Dot.Visible = false
+                end
+                
+            else
+                data.Folder.Parent = nil
+            end
+        end
+    end
+end
+
+RunService.RenderStepped:Connect(UpdateESP)
+Players.PlayerAdded:Connect(CreateESP)
+for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then CreateESP(p) end end
+--[[
+    PandazWare Hybrid: OffenseWare x Binxix
+    PART 4: UI & Visuals
+]]
+
+local Window = PandazWare:CreateWindow({Title = "OffenseWare x Binxix"})
+
+-- COMBAT (OffenseWare)
+local Combat = Window:CreateTab("Combat")
+Combat:Toggle("Aimbot Active", false, function(v) Config.Aimbot.Enabled = v end)
+Combat:Slider("FOV Radius", 10, 500, 120, function(v) Config.Aimbot.FOV = v end)
+Combat:Slider("Smoothing", 0, 100, 50, function(v) Config.Aimbot.Smoothing = v/100 end)
+Combat:Button("-- Gun Mods (OW) --", function() end)
+Combat:Toggle("Infinite Ammo", false, function(v) Config.Gun.InfAmmo = v end)
+Combat:Toggle("Fast Fire", false, function(v) Config.Gun.FastFire = v end)
+Combat:Toggle("No Recoil", false, function(v) Config.Gun.NoRecoil = v end)
+
+-- VISUALS (Binxix)
+local Visuals = Window:CreateTab("Visuals")
+Visuals:Toggle("ESP Master", false, function(v) Config.ESP.Enabled = v end)
+Visuals:Toggle("Boxes (Corner)", true, function(v) Config.ESP.Box = v end)
+Visuals:Toggle("Skeletons", true, function(v) Config.ESP.Skeleton = v end)
+Visuals:Toggle("Names/Distance", false, function(v) 
+    Config.ESP.Name = v 
+    Config.ESP.Distance = v
+end)
+Visuals:Toggle("Health Bar", false, function(v) Config.ESP.Health = v end)
+Visuals:Toggle("Head Dot", false, function(v) Config.ESP.HeadDot = v end)
+Visuals:Button("-- World --", function() end)
+Visuals:Toggle("Fullbright", false, function(v) 
+    Config.Visuals.Fullbright = v
+    if v then 
+        Lighting.Ambient = Color3.new(1,1,1) 
+    else 
+        Lighting.Ambient = Color3.fromRGB(127,127,127) 
+    end
+end)
+Visuals:Toggle("No Fog", false, function(v)
+    if v then 
+        Lighting.FogEnd = 100000 
+    else 
+        Lighting.FogEnd = 1000 
+    end
+end)
+
+-- MOVEMENT (OffenseWare)
+local Move = Window:CreateTab("Movement")
+Move:Toggle("Fly (OW Style)", false, function(v) 
+    Config.Fly.Enabled = v 
+    ToggleFly(v) 
+end)
+Move:Slider("Fly Speed", 10, 200, 50, function(v) Config.Fly.Speed = v end)
+
+PandazWare:Notify("Loaded", "PandazWare Arsenal Ready!", 3)
