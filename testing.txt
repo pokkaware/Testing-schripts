@@ -1,0 +1,321 @@
+-- // PANDAZWARE FINAL: PART 1 // --
+-- Library: Loaded via URL (Untouched)
+-- Features: Old Gun Mods + New Spinbot/Silent Aim + Wallbang/Skins (Phase 4)
+
+getgenv().SecureMode = true
+
+-- [ SERVICES ]
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
+
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- [ LOAD LIBRARY FROM URL ]
+-- Wir laden deine Library direkt vom Link.
+local Library = loadstring(game:HttpGet("https://raw.githubusercontent.com/PandazWare/PandazWare/refs/heads/main/PandazWare%20libary"))()
+
+-- [ SLIDER ADDON ]
+-- Fügt Slider im exakten Design deiner Library hinzu (da die Datei keine hat).
+local function AddSlider(Tab, text, min, max, default, callback)
+    -- Helper um die Page zu finden
+    local TempName = "SYS_" .. math.random(9999)
+    Tab:Toggle(TempName, false, function() end)
+    
+    local Page = nil
+    local FoundToggle = nil
+    local GUI = CoreGui:FindFirstChild("PandazWare") or LocalPlayer.PlayerGui:FindFirstChild("PandazWare")
+    
+    if GUI then
+        for _, v in pairs(GUI:GetDescendants()) do
+            if v:IsA("TextLabel") and v.Text == TempName then
+                FoundToggle = v.Parent
+                Page = FoundToggle.Parent
+                break
+            end
+        end
+    end
+    if FoundToggle then FoundToggle:Destroy() end
+
+    if Page then
+        local val = default or min
+        local Theme = {
+            Element = Color3.fromRGB(32, 32, 38),
+            Text = Color3.fromRGB(240, 240, 240),
+            Accent = Color3.fromRGB(0, 255, 170)
+        }
+        
+        local Wrapper = Instance.new("Frame", Page)
+        Wrapper.Size = UDim2.new(1, 0, 0, 50)
+        Wrapper.BackgroundColor3 = Theme.Element
+        Instance.new("UICorner", Wrapper).CornerRadius = UDim.new(0, 4)
+        
+        local Label = Instance.new("TextLabel", Wrapper)
+        Label.Text = text .. ": " .. val
+        Label.Size = UDim2.new(1, 0, 0, 20)
+        Label.Position = UDim2.new(0, 10, 0, 5)
+        Label.BackgroundTransparency = 1
+        Label.Font = Enum.Font.GothamBold
+        Label.TextSize = 12
+        Label.TextColor3 = Theme.Text
+        Label.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local SliderBar = Instance.new("TextButton", Wrapper)
+        SliderBar.Size = UDim2.new(1, -20, 0, 6)
+        SliderBar.Position = UDim2.new(0, 10, 0, 30)
+        SliderBar.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+        SliderBar.Text = ""
+        SliderBar.AutoButtonColor = false
+        Instance.new("UICorner", SliderBar).CornerRadius = UDim.new(1, 0)
+        
+        local Fill = Instance.new("Frame", SliderBar)
+        Fill.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
+        Fill.BackgroundColor3 = Theme.Accent
+        Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+        
+        local function Update(input)
+            local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
+            val = math.floor(min + ((max - min) * pos))
+            Fill.Size = UDim2.new(pos, 0, 1, 0)
+            Label.Text = text .. ": " .. val
+            pcall(callback, val)
+        end
+        
+        SliderBar.InputBegan:Connect(function(i) 
+            if i.UserInputType == Enum.UserInputType.Touch or i.UserInputType == Enum.UserInputType.MouseButton1 then 
+                Update(i)
+                local c; c = UserInputService.InputChanged:Connect(function(i2) 
+                    if i2.UserInputType == Enum.UserInputType.MouseMovement or i2.UserInputType == Enum.UserInputType.Touch then Update(i2) end 
+                end)
+                i.InputEnded:Connect(function() c:Disconnect() end)
+            end 
+        end)
+    end
+end
+-- // PANDAZWARE FINAL: PART 2 // --
+-- Logic, Gun Mods & New Phase 4 Features
+
+local Flags = {
+    Aimbot = false, FOV = 100, Smooth = 0.5, WallCheck = true, HitChance = 100, ShowFOV = false,
+    SilentAim = false, Hitbox = false, HitboxSize = 4, Spinbot = false, SpinSpeed = 50,
+    ESP_Chams = false, ESP_Box = false, ESP_Skel = false, ESP_Trace = false, Fullbright = false, ClearMap = false,
+    NoRecoil = false, NoSpread = false, RapidFire = false, InfAmmo = false, InstaReload = false,
+    TP = false, TPDist = 12, Speed = false, SpeedVal = 16, Bhop = false,
+    -- NEW PHASE 4
+    Wallbang = false, SkinChanger = false
+}
+
+local DrawCache = {Skeleton={}, Chams={}, Tracers={}}
+local FOVCircle = Drawing.new("Circle"); FOVCircle.Thickness = 1.5; FOVCircle.NumSides = 60; FOVCircle.Filled = false; FOVCircle.Color = Color3.fromRGB(0, 255, 170)
+local SkeletonConnections = {{"Head", "UpperTorso"}, {"UpperTorso", "LowerTorso"}, {"Head", "Torso"}, {"UpperTorso", "LeftUpperArm"}, {"LeftUpperArm", "LeftLowerArm"}, {"LeftLowerArm", "LeftHand"}, {"UpperTorso", "RightUpperArm"}, {"RightUpperArm", "RightLowerArm"}, {"RightLowerArm", "RightHand"}, {"Torso", "Left Leg"}, {"Torso", "Right Leg"}}
+
+local function GetTarget()
+    local target, dist = nil, Flags.FOV
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Team ~= LocalPlayer.Team and p.Character and p.Character:FindFirstChild("Head") and p.Character.Humanoid.Health > 0 then
+            local pos, vis = Camera:WorldToViewportPoint(p.Character.Head.Position)
+            if vis and (Vector2.new(pos.X, pos.Y) - center).Magnitude < dist then
+                target = p.Character.Head; dist = (Vector2.new(pos.X, pos.Y) - center).Magnitude
+            end
+        end
+    end
+    return target
+end
+
+-- [ OLD GUN MODS (Unchanged) ]
+local function ApplyGunMods()
+    local W = ReplicatedStorage:WaitForChild("Weapons")
+    for _, w in ipairs(W:GetChildren()) do
+        if Flags.RapidFire and w:FindFirstChild("FireRate") then w.FireRate.Value = 0 end
+        if Flags.NoSpread then
+             local s = w:FindFirstChild("Spread")
+             if s then
+                if s:IsA("ValueBase") then s.Value = 0 end
+                for _, c in ipairs(s:GetChildren()) do if c:IsA("NumberValue") then c.Value = 0 end end
+             end
+        end
+        if Flags.NoRecoil then
+             local r = w:FindFirstChild("Recoil")
+             if r then for _, c in ipairs(r:GetChildren()) do if c:IsA("NumberValue") then c.Value = 0 end end end
+        end
+        if Flags.InfAmmo and w:FindFirstChild("Ammo") then w.Ammo.Value = 999 end
+        if Flags.InfAmmo and w:FindFirstChild("StoredAmmo") then w.StoredAmmo.Value = 9999 end
+        if Flags.InstaReload and w:FindFirstChild("ReloadTime") then w.ReloadTime.Value = 0.05 end
+    end
+end
+
+-- [ NEW: SKIN CHANGER LOGIC ]
+-- Basiert auf ReplicatedStorage.Skins aus den Logs
+local function ApplySkins()
+    if not Flags.SkinChanger then return end
+    local SkinsFolder = ReplicatedStorage:FindFirstChild("Skins")
+    if not SkinsFolder then return end
+    
+    local Character = LocalPlayer.Character
+    if not Character then return end
+    
+    for _, Tool in pairs(Character:GetChildren()) do
+        if Tool:IsA("Tool") then
+            -- Prüfen ob Skins für diese Waffe existieren
+            local WeaponSkins = SkinsFolder:FindFirstChild(Tool.Name)
+            if WeaponSkins then
+                -- Wir nehmen einfach den ersten Skin als Beispiel (Random)
+                local SkinList = WeaponSkins:GetChildren()
+                if #SkinList > 0 then
+                    local RandomSkin = SkinList[math.random(1, #SkinList)]
+                    
+                    -- Texturen auf das Model im Tool anwenden
+                    for _, Part in pairs(Tool:GetDescendants()) do
+                        if Part:IsA("MeshPart") or Part:IsA("UnionOperation") then
+                            -- Versuche Material/Farbe zu ändern (Basic Skin Change)
+                            Part.Material = Enum.Material.Neon
+                            Part.Color = Color3.fromRGB(0, 255, 170) -- Pandaz Style
+                        end
+                    end
+                end
+            end
+        end
+    end
+end
+
+-- [ VISUALS ]
+local function UpdateESP(p)
+    if not DrawCache.Skeleton[p] then DrawCache.Skeleton[p] = {} end
+    if Flags.ESP_Skel and p.Team ~= LocalPlayer.Team and p.Character then
+        for i, link in pairs(SkeletonConnections) do
+            local p1, p2 = p.Character:FindFirstChild(link[1]), p.Character:FindFirstChild(link[2])
+            if p1 and p2 then
+                local l = DrawCache.Skeleton[p][i] or Drawing.new("Line"); l.Thickness = 1.5; l.Color = Color3.new(1,1,1); l.Transparency = 1; DrawCache.Skeleton[p][i] = l
+                local v1, on1 = Camera:WorldToViewportPoint(p1.Position); local v2, on2 = Camera:WorldToViewportPoint(p2.Position)
+                if on1 and on2 then l.Visible = true; l.From = Vector2.new(v1.X, v1.Y); l.To = Vector2.new(v2.X, v2.Y) else l.Visible = false end
+            end
+        end
+    else for _, v in pairs(DrawCache.Skeleton[p]) do v.Visible = false end end
+
+    if Flags.ESP_Chams and p.Team ~= LocalPlayer.Team and p.Character then
+        if not p.Character:FindFirstChild("PZCham") then
+            local h = Instance.new("Highlight", p.Character); h.Name = "PZCham"; h.FillColor = Color3.fromRGB(0,255,170); h.OutlineTransparency = 1; h.FillTransparency = 0.5
+        end
+    elseif p.Character and p.Character:FindFirstChild("PZCham") then p.Character.PZCham:Destroy() end
+end
+-- // PANDAZWARE FINAL: PART 3 // --
+-- Hooks, UI & Execution
+
+-- [ UI CONSTRUCTION ]
+local Window = Library:CreateWindow({Title = "PandazWare"})
+Library:Notify("PandazWare", "Phase 4 Update Loaded!", 3)
+
+local Legit = Window:CreateTab("Legit")
+Legit:Toggle("Aimbot", false, function(v) Flags.Aimbot = v end)
+AddSlider(Legit, "FOV", 10, 400, 100, function(v) Flags.FOV = v end)
+AddSlider(Legit, "Smooth", 1, 10, 5, function(v) Flags.Smooth = v/10 end)
+Legit:Toggle("Show FOV", false, function(v) Flags.ShowFOV = v end)
+
+local Rage = Window:CreateTab("Rage")
+Rage:Toggle("Silent Aim", false, function(v) Flags.SilentAim = v end)
+Rage:Toggle("Wallbang", false, function(v) Flags.Wallbang = v end) -- NEU
+Rage:Toggle("Spinbot", false, function(v) Flags.Spinbot = v end)
+AddSlider(Rage, "Spin Speed", 10, 100, 50, function(v) Flags.SpinSpeed = v end)
+Rage:Toggle("Hitbox Extender", false, function(v) Flags.Hitbox = v end)
+AddSlider(Rage, "Hitbox Size", 2, 10, 4, function(v) Flags.HitboxSize = v end)
+
+local Visuals = Window:CreateTab("Visuals")
+Visuals:Toggle("Chams", false, function(v) Flags.ESP_Chams = v end)
+Visuals:Toggle("Skeleton ESP", false, function(v) Flags.ESP_Skel = v end)
+Visuals:Toggle("Fullbright", false, function(v) Flags.Fullbright = v end)
+Visuals:Toggle("Skin Changer (Beta)", false, function(v) Flags.SkinChanger = v end) -- NEU
+
+local Gun = Window:CreateTab("Gun Mods")
+Gun:Toggle("No Recoil", false, function(v) Flags.NoRecoil = v end)
+Gun:Toggle("No Spread", false, function(v) Flags.NoSpread = v end)
+Gun:Toggle("Rapid Fire", false, function(v) Flags.RapidFire = v end)
+Gun:Toggle("Infinite Ammo", false, function(v) Flags.InfAmmo = v end)
+
+local Misc = Window:CreateTab("Misc")
+Misc:Toggle("Speed Hack", false, function(v) Flags.Speed = v end)
+AddSlider(Misc, "Speed Val", 16, 100, 25, function(v) Flags.SpeedVal = v end)
+Misc:Toggle("Bhop", false, function(v) Flags.Bhop = v end)
+Misc:Toggle("3rd Person", false, function(v) Flags.TP = v end)
+
+-- [ HOOKS: SILENT AIM & WALLBANG ]
+local mt = getrawmetatable(game)
+local oldNamecall = mt.__namecall
+setreadonly(mt, false)
+
+mt.__namecall = newcclosure(function(self, ...)
+    local args = {...}
+    local method = getnamecallmethod()
+    
+    -- 1. Silent Aim (Override Target Vector)
+    if Flags.SilentAim and method == "FireServer" and (self.Name == "Fire" or self.Name == "Shoot") then
+        local t = GetTarget()
+        if t then
+            for i, v in pairs(args) do
+                if typeof(v) == "Vector3" then args[i] = t.Position end
+            end
+            return oldNamecall(self, unpack(args))
+        end
+    end
+
+    -- 2. Wallbang Hook (aus Phase 4 Logs)
+    if Flags.Wallbang and (method == "FindPartOnRayWithIgnoreList" or method == "Raycast") then
+        -- Wir fügen die Map zur IgnoreList hinzu
+        if method == "FindPartOnRayWithIgnoreList" then
+            local ignoreList = args[2] or {}
+            table.insert(ignoreList, Workspace:FindFirstChild("Map")) -- Standard Map Ordner
+            args[2] = ignoreList
+            return oldNamecall(self, unpack(args))
+        end
+    end
+    
+    return oldNamecall(self, ...)
+end)
+setreadonly(mt, true)
+
+-- [ LOOPS ]
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Visible = Flags.ShowFOV; FOVCircle.Radius = Flags.FOV
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    
+    if Flags.Aimbot and not Flags.SilentAim then
+        local t = GetTarget()
+        if t then Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, t.Position), 1 - Flags.Smooth) end
+    end
+    
+    -- New Spinbot
+    if Flags.Spinbot and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") then
+        LocalPlayer.Character.HumanoidRootPart.CFrame = LocalPlayer.Character.HumanoidRootPart.CFrame * CFrame.Angles(0, math.rad(Flags.SpinSpeed), 0)
+    end
+    
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then UpdateESP(p) end
+    end
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if Flags.NoRecoil or Flags.NoSpread or Flags.RapidFire or Flags.InfAmmo or Flags.InstaReload then ApplyGunMods() end
+        if Flags.SkinChanger then ApplySkins() end -- Skin Changer Loop
+        if Flags.Speed and LocalPlayer.Character then LocalPlayer.Character.Humanoid.WalkSpeed = Flags.SpeedVal end
+        if Flags.Bhop and LocalPlayer.Character and LocalPlayer.Character.Humanoid.MoveDirection.Magnitude > 0 and LocalPlayer.Character.Humanoid.FloorMaterial ~= Enum.Material.Air then LocalPlayer.Character.Humanoid.Jump = true end
+        if Flags.Hitbox then
+            for _, p in pairs(Players:GetPlayers()) do
+                if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("Head") then
+                    p.Character.Head.Size = Vector3.new(Flags.HitboxSize, Flags.HitboxSize, Flags.HitboxSize)
+                    p.Character.Head.Transparency = 0.7; p.Character.Head.CanCollide = false
+                end
+            end
+        end
+        if Flags.Fullbright then Lighting.Brightness = 2; Lighting.ClockTime = 14 else Lighting.Brightness = 1 end
+        if Flags.TP then LocalPlayer.CameraMode = Enum.CameraMode.Classic; LocalPlayer.CameraMaxZoomDistance = Flags.TPDist; LocalPlayer.CameraMinZoomDistance = Flags.TPDist else LocalPlayer.CameraMode = Enum.CameraMode.LockFirstPerson; LocalPlayer.CameraMaxZoomDistance = 0.5 end
+    end
+end)
+
