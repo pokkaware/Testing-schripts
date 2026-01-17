@@ -1,0 +1,352 @@
+-- [[ PANDAZWARE ULTIMATE LOADER - TEIL 1 ]] --
+-- BITTE BEIDE TEILE IN EINE DATEI EINFÜGEN!
+
+local LibrarySuccess, PandazWare = pcall(function()
+    return loadstring(game:HttpGet("https://raw.githubusercontent.com/PandazWare/PandazWare/refs/heads/main/PandazWare%20libary"))()
+end)
+
+if not LibrarySuccess or not PandazWare then
+    warn("Fehler beim Laden der Library!")
+    return
+end
+
+local Window = PandazWare:CreateWindow({
+    Title = "PandazWare | Gun ground FFA", 
+})
+
+-- [[ SERVICES ]] --
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local Lighting = game:GetService("Lighting")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+-- [[ SETTINGS ]] --
+getgenv().PandaSettings = { -- Global, damit Teil 2 darauf zugreifen kann
+    -- Combat
+    Aimbot = false,
+    AimPart = "Head",
+    FOV = 100,
+    Smoothness = 0.5,
+    Prediction = 0.065,
+    RainbowFOV = false,
+    WallCheck = false,
+    
+    -- Weapon
+    GunMods = false,
+    RapidFire = false,
+    NoRecoil = false,
+    InstantReload = false,
+    AutoGun = false,
+    Wallbang = false,
+    
+    -- Visuals
+    ESP_Enabled = false,
+    BoxESP = false,
+    BoxType = "Corner",
+    TracerESP = false,
+    SkeletonESP = false,
+    NameESP = false,
+    HealthESP = false,
+    Chams = false,
+    ThirdPerson = false,
+    NightMode = false,
+    NoFog = false,
+    
+    -- Player
+    SpeedEnabled = false,
+    Speed = 16,
+    JumpEnabled = false,
+    Jump = 50,
+    Fly = false,
+    FlySpeed = 50,
+    Noclip = false,
+    
+    -- Misc
+    SpinbotCFrame = false,
+    SpinbotPhysics = false,
+    SpinSpeed = 20
+}
+
+-- [[ VARIABLES ]] --
+local Settings = getgenv().PandaSettings
+local Drawings = {} 
+local Highlights = {}
+local LockedTarget = nil
+
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = Color3.fromRGB(0, 255, 170)
+FOVCircle.Thickness = 2
+FOVCircle.NumSides = 24
+FOVCircle.Filled = false
+FOVCircle.Visible = false
+local Hue = 0
+
+-- [[ HELPER FUNCTIONS ]] --
+
+local function CreateDrawing(type, properties)
+    local drawing = Drawing.new(type)
+    for k, v in pairs(properties) do drawing[k] = v end
+    return drawing
+end
+
+local function RemoveESP(player)
+    if Drawings[player] then
+        for _, d in pairs(Drawings[player]) do
+            if type(d) == "table" then
+                for _, line in pairs(d) do line:Remove() end
+            else
+                d:Remove()
+            end
+        end
+        Drawings[player] = nil
+    end
+    if Highlights[player] then
+        Highlights[player]:Destroy()
+        Highlights[player] = nil
+    end
+end
+
+local function InitESP(player)
+    if player == LocalPlayer then return end
+    RemoveESP(player)
+
+    local Objects = {
+        Box = {
+            TL = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            TR = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            BL = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            BR = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            L = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            R = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            T = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+            B = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+        },
+        Tracer = CreateDrawing("Line", {Thickness=1, Color=Color3.new(1,0,0), Visible=false}),
+        Name = CreateDrawing("Text", {Size=14, Center=true, Outline=true, Color=Color3.new(1,1,1), Visible=false}),
+        HealthBar = {
+            Outline = CreateDrawing("Square", {Thickness=1, Filled=true, Color=Color3.new(0,0,0), Visible=false}),
+            Fill = CreateDrawing("Square", {Thickness=1, Filled=true, Color=Color3.new(0,1,0), Visible=false})
+        },
+        Skeleton = {}
+    }
+    
+    local Bones = {"Head","UpperTorso","LowerTorso","LeftUpperArm","LeftLowerArm","LeftHand","RightUpperArm","RightLowerArm","RightHand","LeftUpperLeg","LeftLowerLeg","LeftFoot","RightUpperLeg","RightLowerLeg","RightFoot"}
+    for _, bone in pairs(Bones) do
+        Objects.Skeleton[bone] = CreateDrawing("Line", {Thickness=1.5, Color=Color3.new(1,1,1), Visible=false})
+    end
+    Drawings[player] = Objects
+end
+
+-- Wallcheck
+local function IsVisible(targetPart)
+    local Origin = Camera.CFrame.Position
+    local Direction = targetPart.Position - Origin
+    local Params = RaycastParams.new()
+    Params.FilterDescendantsInstances = {LocalPlayer.Character}
+    Params.FilterType = Enum.RaycastFilterType.Blacklist
+    local Result = Workspace:Raycast(Origin, Direction, Params)
+    if Result then return Result.Instance:IsDescendantOf(targetPart.Parent) end
+    return false
+end
+
+-- Nearest Target Logic
+local function GetNearestTargetInFOV()
+    local BestTarget = nil
+    local ClosestDistance3D = math.huge
+    local Center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    if not LocalPlayer.Character then return nil end
+
+    for _, Player in pairs(Players:GetPlayers()) do
+        if Player ~= LocalPlayer and Player.Character and Player.Character:FindFirstChild("Humanoid") and Player.Character.Humanoid.Health > 0 and Player.Character:FindFirstChild("HumanoidRootPart") then
+            local TargetPart = Player.Character:FindFirstChild(Settings.AimPart)
+            if TargetPart then
+                local Pos, OnScreen = Camera:WorldToViewportPoint(TargetPart.Position)
+                if OnScreen then
+                    local Dist2D = (Center - Vector2.new(Pos.X, Pos.Y)).Magnitude
+                    if Dist2D <= Settings.FOV then
+                        local IsBlocked = false
+                        if Settings.WallCheck and not IsVisible(TargetPart) then IsBlocked = true end
+                        
+                        if not IsBlocked then
+                            local Dist3D = (LocalPlayer.Character.HumanoidRootPart.Position - TargetPart.Position).Magnitude
+                            if Dist3D < ClosestDistance3D then
+                                ClosestDistance3D = Dist3D
+                                BestTarget = TargetPart
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return BestTarget
+end
+-- [[ PANDAZWARE ULTIMATE LOADER - TEIL 2 ]] --
+
+-- ESP Loop
+RunService.RenderStepped:Connect(function()
+    local Settings = getgenv().PandaSettings
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            if not Drawings[player] then InitESP(player) end
+            local Objects = Drawings[player]
+            local Char = player.Character
+            local HRP = Char and Char:FindFirstChild("HumanoidRootPart")
+            local Hum = Char and Char:FindFirstChild("Humanoid")
+            
+            if Char and HRP and Hum and Hum.Health > 0 and Settings.ESP_Enabled then
+                local Pos, OnScreen = Camera:WorldToViewportPoint(HRP.Position)
+                local Size = (Camera:WorldToViewportPoint(HRP.Position - Vector3.new(0,3,0)).Y - Camera:WorldToViewportPoint(HRP.Position + Vector3.new(0,2.6,0)).Y) / 2
+                local BoxSize = Vector2.new(math.abs(Size * 1.5), math.abs(Size * 2))
+                local BoxPos = Vector2.new(Pos.X - BoxSize.X / 2, Pos.Y - BoxSize.Y / 2)
+
+                if OnScreen then
+                    if Settings.BoxESP then
+                         -- Box Logic (Simplified for space)
+                        Objects.Box.L.Visible = true; Objects.Box.L.From = BoxPos; Objects.Box.L.To = BoxPos + Vector2.new(0, BoxSize.Y)
+                        Objects.Box.R.Visible = true; Objects.Box.R.From = Vector2.new(BoxPos.X + BoxSize.X, BoxPos.Y); Objects.Box.R.To = Vector2.new(BoxPos.X + BoxSize.X, BoxPos.Y + BoxSize.Y)
+                        Objects.Box.T.Visible = true; Objects.Box.T.From = BoxPos; Objects.Box.T.To = BoxPos + Vector2.new(BoxSize.X, 0)
+                        Objects.Box.B.Visible = true; Objects.Box.B.From = Vector2.new(BoxPos.X, BoxPos.Y + BoxSize.Y); Objects.Box.B.To = Vector2.new(BoxPos.X + BoxSize.X, BoxPos.Y + BoxSize.Y)
+                    else
+                        for _, l in pairs(Objects.Box) do l.Visible = false end
+                    end
+                    
+                    if Settings.TracerESP then
+                        Objects.Tracer.Visible = true; Objects.Tracer.From = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y); Objects.Tracer.To = Vector2.new(Pos.X, Pos.Y)
+                    else Objects.Tracer.Visible = false end
+
+                    if Settings.NameESP then
+                        Objects.Name.Visible = true; Objects.Name.Text = player.Name; Objects.Name.Position = Vector2.new(Pos.X, BoxPos.Y - 20)
+                    else Objects.Name.Visible = false end
+
+                    if Settings.Chams then
+                        if not Highlights[player] then
+                            local hl = Instance.new("Highlight", game.CoreGui); hl.Adornee = Char; hl.FillColor = Color3.fromRGB(255,0,0); hl.OutlineColor = Color3.fromRGB(255,255,255); Highlights[player] = hl
+                        end
+                    else
+                        if Highlights[player] then Highlights[player]:Destroy(); Highlights[player] = nil end
+                    end
+                else
+                    for _, v in pairs(Objects.Box) do v.Visible = false end; Objects.Tracer.Visible = false; Objects.Name.Visible = false
+                end
+            else
+                 if Drawings[player] then for _, v in pairs(Drawings[player].Box) do v.Visible = false end; Drawings[player].Tracer.Visible = false; Drawings[player].Name.Visible = false end
+                 if Highlights[player] then Highlights[player]:Destroy(); Highlights[player] = nil end
+            end
+        end
+    end
+end)
+Players.PlayerRemoving:Connect(RemoveESP)
+
+-- Main Loop (Aimbot, Move, Spin)
+RunService.RenderStepped:Connect(function()
+    local Settings = getgenv().PandaSettings
+    -- Aimbot
+    if Settings.RainbowFOV then Hue = Hue + 0.005; if Hue > 1 then Hue = 0 end; FOVCircle.Color = Color3.fromHSV(Hue, 1, 1)
+    else FOVCircle.Color = Color3.fromRGB(0, 255, 170) end
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2); FOVCircle.Radius = Settings.FOV; FOVCircle.Visible = Settings.Aimbot
+
+    if Settings.Aimbot then
+        if LockedTarget and (not LockedTarget.Parent or not LockedTarget.Parent:FindFirstChild("Humanoid") or LockedTarget.Parent.Humanoid.Health <= 0) then LockedTarget = nil end
+        if not LockedTarget then LockedTarget = GetNearestTargetInFOV() end
+        if LockedTarget then
+            local Pred = LockedTarget.Position + (LockedTarget.Parent.HumanoidRootPart.Velocity * Settings.Prediction)
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, Pred), Settings.Smoothness)
+        end
+    else LockedTarget = nil end
+    
+    -- Movement & Spin
+    if LocalPlayer.Character then
+        local Root = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        local Hum = LocalPlayer.Character:FindFirstChild("Humanoid")
+        if Hum then
+            if Settings.SpeedEnabled then Hum.WalkSpeed = Settings.Speed end
+            if Settings.JumpEnabled then Hum.JumpPower = Settings.Jump end
+        end
+        
+        -- Fly
+        if Settings.Fly and Root then
+            local BV = Instance.new("BodyVelocity", Root); BV.Velocity = Vector3.new(0,0,0); BV.MaxForce = Vector3.new(math.huge, math.huge, math.huge)
+            if UserInputService:IsKeyDown(Enum.KeyCode.W) then Root.CFrame = Root.CFrame + Camera.CFrame.LookVector * (Settings.FlySpeed * 0.05) end
+            game:GetService("Debris"):AddItem(BV, 0.05)
+        end
+        
+        -- SPINBOT PHYSICS FIX
+        if Settings.SpinbotPhysics and Root then
+            local AV = Root:FindFirstChild("SpinBotVel") or Instance.new("AngularVelocity", Root)
+            AV.Name = "SpinBotVel"; AV.Attachment0 = Root:WaitForChild("RootAttachment"); AV.MaxTorque = math.huge; AV.AngularVelocity = Vector3.new(0, Settings.SpinSpeed * 10, 0)
+            
+            -- STABILIZER (Anti-Fling)
+            local BG = Root:FindFirstChild("SpinBotStab") or Instance.new("BodyGyro", Root)
+            BG.Name = "SpinBotStab"; BG.MaxTorque = Vector3.new(math.huge, 0, math.huge); BG.P = 5000; BG.CFrame = CFrame.new(0,0,0)
+        else
+            if Root and Root:FindFirstChild("SpinBotVel") then Root.SpinBotVel:Destroy() end
+            if Root and Root:FindFirstChild("SpinBotStab") then Root.SpinBotStab:Destroy() end
+        end
+        
+        -- SPINBOT CFRAME
+        if Settings.SpinbotCFrame and Root then Root.CFrame = Root.CFrame * CFrame.Angles(0, math.rad(Settings.SpinSpeed), 0) end
+    end
+    
+    -- Visuals Misc
+    if Settings.NightMode then Lighting.ClockTime = 0 end
+    if Settings.NoFog then Lighting.FogEnd = 100000 end
+    if Settings.ThirdPerson then LocalPlayer.CameraMode = Enum.CameraMode.Classic; LocalPlayer.CameraMaxZoomDistance = 25; LocalPlayer.CameraMinZoomDistance = 5 end
+end)
+
+-- Gun Mods
+task.spawn(function()
+    while true do task.wait(0.5)
+        if getgenv().PandaSettings.GunMods then
+            pcall(function()
+                local C = LocalPlayer.Character:FindFirstChildWhichIsA("Tool").Configuration
+                if getgenv().PandaSettings.RapidFire then C.FireRate.Value = 0.01 end
+                if getgenv().PandaSettings.NoRecoil then C.Recoil.Value = Vector3.new(0,0,0) end
+                if getgenv().PandaSettings.InstantReload then C.reloadTime.Value = 0 end
+                if getgenv().PandaSettings.AutoGun then C.isAuto.Value = true end
+            end)
+        end
+    end
+end)
+
+-- UI Setup
+local CombatTab = Window:CreateTab("Combat")
+CombatTab:Toggle("Enable Aimbot", false, function(s) getgenv().PandaSettings.Aimbot = s end)
+CombatTab:Toggle("Wallcheck", false, function(s) getgenv().PandaSettings.WallCheck = s end)
+CombatTab:Dropdown("Target Part", {"Head", "UpperTorso"}, "Head", function(v) getgenv().PandaSettings.AimPart = v end)
+CombatTab:Slider("FOV Size", 10, 400, 100, function(v) getgenv().PandaSettings.FOV = v end)
+CombatTab:Toggle("Rainbow FOV", false, function(s) getgenv().PandaSettings.RainbowFOV = s end)
+
+local WeaponTab = Window:CreateTab("Weapon")
+WeaponTab:Toggle("Enable Gun Mods", false, function(s) getgenv().PandaSettings.GunMods = s end)
+WeaponTab:Toggle("Rapid Fire", false, function(s) getgenv().PandaSettings.RapidFire = s end)
+WeaponTab:Toggle("No Recoil", false, function(s) getgenv().PandaSettings.NoRecoil = s end)
+WeaponTab:Toggle("Instant Reload", false, function(s) getgenv().PandaSettings.InstantReload = s end)
+WeaponTab:Toggle("Force Auto", false, function(s) getgenv().PandaSettings.AutoGun = s end)
+
+local VisualTab = Window:CreateTab("Visuals")
+VisualTab:Toggle("Master ESP", false, function(s) getgenv().PandaSettings.ESP_Enabled = s end)
+VisualTab:Toggle("Box ESP", false, function(s) getgenv().PandaSettings.BoxESP = s end)
+VisualTab:Toggle("Tracers", false, function(s) getgenv().PandaSettings.TracerESP = s end)
+VisualTab:Toggle("Names", false, function(s) getgenv().PandaSettings.NameESP = s end)
+VisualTab:Toggle("Chams (Highlight)", false, function(s) getgenv().PandaSettings.Chams = s end)
+VisualTab:Toggle("Unlock 3rd Person", false, function(s) getgenv().PandaSettings.ThirdPerson = s end)
+VisualTab:Toggle("Night Mode", false, function(s) getgenv().PandaSettings.NightMode = s end)
+
+local MoveTab = Window:CreateTab("Movement")
+MoveTab:Toggle("Enable Speed", false, function(s) getgenv().PandaSettings.SpeedEnabled = s end)
+MoveTab:Slider("Speed Amount", 16, 350, 16, function(v) getgenv().PandaSettings.Speed = v end)
+MoveTab:Toggle("Enable Jump", false, function(s) getgenv().PandaSettings.JumpEnabled = s end)
+MoveTab:Slider("Jump Power", 50, 350, 50, function(v) getgenv().PandaSettings.Jump = v end)
+MoveTab:Toggle("Fly Mode", false, function(s) getgenv().PandaSettings.Fly = s end)
+
+local MiscTab = Window:CreateTab("Misc")
+MiscTab:Toggle("Spinbot (CFrame)", false, function(s) getgenv().PandaSettings.SpinbotCFrame = s; if s then getgenv().PandaSettings.SpinbotPhysics = false end end)
+MiscTab:Toggle("Spinbot (Physics Fix)", false, function(s) getgenv().PandaSettings.SpinbotPhysics = s; if s then getgenv().PandaSettings.SpinbotCFrame = false end end)
+MiscTab:Slider("Spin Speed", 10, 100, 50, function(v) getgenv().PandaSettings.SpinSpeed = v end)
+
+PandazWare:Notify("System", "Gun ground FFA loaded successfully", 5)
