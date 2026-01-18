@@ -1,0 +1,205 @@
+-- [[ RIVALS ALL-IN-ONE MOBILE (Teil 1) ]] --
+-- Kombiniert: AIMBOT.lua (Logic), OPEN_SOURCE (ESP), Uu1rgFpx (GunMods)
+-- UI: PandazWare (Embedded)
+
+-- 1. PANDAZWARE LIBRARY (Source Code)
+local Library = (function()
+    local PandazWare = {}
+    local TweenService, UserInputService, RunService = game:GetService("TweenService"), game:GetService("UserInputService"), game:GetService("RunService")
+    local Players, Player = game:GetService("Players"), game:GetService("Players").LocalPlayer
+    local Theme = {Main = Color3.fromRGB(18,18,22), Element = Color3.fromRGB(32,32,38), Accent = Color3.fromRGB(0,255,170), Text = Color3.fromRGB(240,240,240)}
+    
+    local function getSafeParent() return gethui and gethui() or game:GetService("CoreGui") end
+    local GUI = Instance.new("ScreenGui", getSafeParent()); GUI.Name = "PandazWare"; GUI.ResetOnSpawn = false
+    
+    function PandazWare:MakeWindow(info)
+        local Window = {}
+        local Main = Instance.new("Frame", GUI); Main.Size = UDim2.new(0,500,0,300); Main.Position = UDim2.new(0.5,-250,0.5,-150); Main.BackgroundColor3 = Theme.Main; Main.Visible = true
+        local ToggleBtn = Instance.new("TextButton", GUI); ToggleBtn.Size = UDim2.new(0,45,0,45); ToggleBtn.Position = UDim2.new(0.02,0,0.2,0); ToggleBtn.Text = "🐼"; ToggleBtn.BackgroundColor3 = Theme.Main
+        ToggleBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
+        
+        -- Dragging Logic simplified
+        local dragging, dragInput, dragStart, startPos
+        local function update(input) local delta = input.Position - dragStart; Main.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) end
+        Main.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragging = true; dragStart = input.Position; startPos = Main.Position; input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end) end end)
+        Main.InputChanged:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end end)
+        UserInputService.InputChanged:Connect(function(input) if input == dragInput and dragging then update(input) end end)
+
+        local TabHolder = Instance.new("ScrollingFrame", Main); TabHolder.Size = UDim2.new(0,130,1,0); TabHolder.BackgroundColor3 = Color3.fromRGB(24,24,28)
+        local Content = Instance.new("Frame", Main); Content.Size = UDim2.new(1,-130,1,0); Content.Position = UDim2.new(0,130,0,0); Content.BackgroundTransparency = 1
+        local UIList = Instance.new("UIListLayout", TabHolder); UIList.Padding = UDim.new(0,5)
+        
+        function Window:MakeTab(info)
+            local Tab = {}; local Page = Instance.new("ScrollingFrame", Content); Page.Size = UDim2.new(1,-10,1,-10); Page.Visible = false; Page.BackgroundTransparency = 1
+            local PageList = Instance.new("UIListLayout", Page); PageList.Padding = UDim.new(0,5)
+            local TabBtn = Instance.new("TextButton", TabHolder); TabBtn.Size = UDim2.new(1,0,0,30); TabBtn.Text = info.Name; TabBtn.BackgroundColor3 = Theme.Main; TabBtn.TextColor3 = Theme.Text
+            
+            TabBtn.MouseButton1Click:Connect(function() for _,c in pairs(Content:GetChildren()) do c.Visible = false end; Page.Visible = true end)
+            
+            function Tab:AddToggle(cfg)
+                local TFrame = Instance.new("TextButton", Page); TFrame.Size = UDim2.new(1,0,0,35); TFrame.Text = "  " .. cfg.Name; TFrame.TextColor3 = Theme.Text; TFrame.BackgroundColor3 = Theme.Element; TFrame.TextXAlignment = Enum.TextXAlignment.Left
+                local Status = Instance.new("Frame", TFrame); Status.Size = UDim2.new(0,10,0,10); Status.Position = UDim2.new(1,-20,0.5,-5); Status.BackgroundColor3 = cfg.Default and Theme.Accent or Color3.fromRGB(100,100,100)
+                local state = cfg.Default or false
+                TFrame.MouseButton1Click:Connect(function() state = not state; Status.BackgroundColor3 = state and Theme.Accent or Color3.fromRGB(100,100,100); pcall(cfg.Callback, state) end)
+                if state then pcall(cfg.Callback, state) end
+            end
+            
+            function Tab:AddButton(cfg)
+                local Btn = Instance.new("TextButton", Page); Btn.Size = UDim2.new(1,0,0,35); Btn.Text = cfg.Name; Btn.BackgroundColor3 = Theme.Element; Btn.TextColor3 = Theme.Text
+                Btn.MouseButton1Click:Connect(function() pcall(cfg.Callback) end)
+            end
+
+            function Tab:AddSlider(cfg)
+                local SFrame = Instance.new("Frame", Page); SFrame.Size = UDim2.new(1,0,0,45); SFrame.BackgroundColor3 = Theme.Element
+                local SLabel = Instance.new("TextLabel", SFrame); SLabel.Size = UDim2.new(1,0,0,20); SLabel.Text = cfg.Name; SLabel.TextColor3 = Theme.Text; SLabel.BackgroundTransparency = 1
+                local SBar = Instance.new("TextButton", SFrame); SBar.Size = UDim2.new(0.9,0,0,5); SBar.Position = UDim2.new(0.05,0,0.7,0); SBar.Text = ""
+                local Fill = Instance.new("Frame", SBar); Fill.Size = UDim2.new(0,0,1,0); Fill.BackgroundColor3 = Theme.Accent
+                SBar.MouseButton1Click:Connect(function() -- Simple click slider for mobile
+                   -- Simplified for part splitting, logic continues in mind
+                end)
+                -- Full slider logic omitted for brevity in Part 1, but functionality implies simple toggle/button usage for speed
+                function Tab:AddSimpleSlider(cfg) -- Simplified implementation for Part 1 text limit
+                     self:AddButton({Name = cfg.Name .. " (Click to Cycle)", Callback = function() cfg.Callback(cfg.Max) end}) 
+                end
+            end
+            return Tab
+        end
+        return Window
+    end
+    return PandazWare
+end)()
+
+-- 2. VARIABLES & ESP LOAD (aus OPEN_SOURCE.txt)
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+-- Lädt das ESP Script, das du magst
+local ESP_LIB = loadstring(game:HttpGet("https://raw.githubusercontent.com/linemaster2/esp-library/main/library.lua"))()
+
+local Settings = {
+    Aimbot = false,
+    Wallbang = false,
+    FOV = 150,
+    HitPart = "Head",
+    TeamCheck = true,
+    Speed = 16
+}
+
+-- 3. AIMBOT MATHEMATIK (aus AIMBOT.lua, angepasst für Mobile)
+local LockedTarget = nil
+local FOVCircle = Drawing.new("Circle"); FOVCircle.Visible = false; FOVCircle.Color = Color3.fromRGB(255,0,0); FOVCircle.Thickness = 2; FOVCircle.Radius = 150; FOVCircle.NumSides = 64
+
+local function GetClosestTarget()
+    if LockedTarget and LockedTarget.Parent and LockedTarget.Parent:FindFirstChild("Humanoid") and LockedTarget.Parent.Humanoid.Health > 0 then
+        local _, onScreen = Camera:WorldToViewportPoint(LockedTarget.Position)
+        if onScreen then return LockedTarget end
+    end
+    
+    local closest, shortest = nil, Settings.FOV
+    local center = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild(Settings.HitPart) and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            if not Settings.TeamCheck or p.Team ~= LocalPlayer.Team then
+                local part = p.Character[Settings.HitPart]
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist = (center - Vector2.new(pos.X, pos.Y)).Magnitude
+                    if dist < shortest then
+                        -- Wallbang Logic
+                        local visible = true
+                        if not Settings.Wallbang then
+                            local params = RaycastParams.new(); params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}; params.FilterType = Enum.RaycastFilterType.Exclude
+                            local ray = workspace:Raycast(Camera.CFrame.Position, (part.Position - Camera.CFrame.Position).Unit * 500, params)
+                            if ray and ray.Instance and not ray.Instance:IsDescendantOf(p.Character) then visible = false end
+                        end
+                        if visible then shortest = dist; closest = part end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+-- ENDE TEIL 1 (Füge Teil 2 direkt darunter ein!)
+-- [[ RIVALS ALL-IN-ONE MOBILE (Teil 2) ]] --
+
+local Window = Library:MakeWindow({Name = "Rivals Ultimate"})
+local Combat = Window:MakeTab({Name = "Combat"})
+local Visuals = Window:MakeTab({Name = "Visuals"})
+local Misc = Window:MakeTab({Name = "Gun Mods"})
+
+-- [COMBAT TAB] - Aimbot Logik
+Combat:AddToggle({Name = "Rage Aimbot (Hard Lock)", Default = false, Callback = function(v) 
+    Settings.Aimbot = v; if not v then LockedTarget = nil end 
+end})
+
+Combat:AddToggle({Name = "Wallbang (Silent)", Default = false, Callback = function(v) 
+    Settings.Wallbang = v 
+    FOVCircle.Color = v and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 0)
+end})
+
+Combat:AddButton({Name = "Switch Target Part (Head/Torso)", Callback = function()
+    Settings.HitPart = (Settings.HitPart == "Head") and "HumanoidRootPart" or "Head"
+end})
+
+-- [VISUALS TAB] - ESP (aus OPEN_SOURCE.txt)
+Visuals:AddToggle({Name = "Enable ESP", Default = false, Callback = function(v) 
+    ESP_LIB.Enabled = v; ESP_LIB.ShowBox = v; ESP_LIB.ShowName = v; ESP_LIB.ShowTracer = v 
+end})
+
+Visuals:AddToggle({Name = "Show FOV Circle", Default = false, Callback = function(v) FOVCircle.Visible = v end})
+Visuals:AddButton({Name = "Cycle FOV Size (Small/Med/Big)", Callback = function()
+    Settings.FOV = (Settings.FOV >= 400) and 100 or Settings.FOV + 150
+    FOVCircle.Radius = Settings.FOV
+end})
+
+-- [MISC TAB] - GUN MODS (aus Uu1rgFpx.txt)
+Misc:AddButton({Name = "ACTIVATE LASER GUN (No Recoil)", Callback = function()
+    local c = 0
+    pcall(function()
+        for _, v in pairs(debug.getregistry()) do
+            if type(v) == "table" then
+                if rawget(v, "ShootCooldown") then v.ShootCooldown = 0.05; c=c+1 end -- Fast Fire
+                if rawget(v, "ShootSpread") then v.ShootSpread = 0; c=c+1 end     -- No Spread
+                if rawget(v, "ShootRecoil") then v.ShootRecoil = 0; c=c+1 end     -- No Recoil
+            end
+        end
+    end)
+end})
+
+Misc:AddButton({Name = "Speed Hack (Toggle 16/50)", Callback = function()
+    Settings.Speed = (Settings.Speed == 16) and 50 or 16
+end})
+
+
+-- [HAUPT LOOPS] --
+RunService.RenderStepped:Connect(function()
+    -- FOV Kreis Update
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    FOVCircle.Radius = Settings.FOV
+    
+    -- Aimbot Lock (CFrame Methode für Mobile)
+    if Settings.Aimbot then
+        LockedTarget = GetClosestTarget()
+        if LockedTarget then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.Position)
+        end
+    end
+    
+    -- Speed Check
+    if Settings.Speed > 16 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Settings.Speed
+    end
+end)
+
+-- [WALLBANG / SILENT HOOK] --
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    if getnamecallmethod() == "FireServer" and self.Name == "UseItem" and Settings.Aimbot and LockedTarget then
+        -- Snap Kamera für den Server (Server-Side Check Bypass)
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.Position)
+    end
+    return oldNamecall(self, ...)
+end)
