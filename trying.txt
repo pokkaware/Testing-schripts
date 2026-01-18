@@ -1,0 +1,526 @@
+-- [[ RIVALS ULTIMATE MOBILE - FULL SOURCE ]] --
+-- Credits: Logic by Dirt/Sike, UI by PandazWare (Embedded)
+
+-- [1] PANDAZWARE LIBRARY SOURCE (Direkt eingebaut) --
+local Library = (function()
+    local PandazWare = {}
+    PandazWare.Version = "PandazWare"
+
+    local TweenService = game:GetService("TweenService")
+    local UserInputService = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local TextService = game:GetService("TextService")
+    local Players = game:GetService("Players")
+    local Player = Players.LocalPlayer
+
+    -- Theme Definition
+    local Theme = {
+        Main = Color3.fromRGB(18, 18, 22),       
+        Sidebar = Color3.fromRGB(24, 24, 28),    
+        Element = Color3.fromRGB(32, 32, 38),    
+        Stroke = Color3.fromRGB(50, 50, 55),     
+        Accent = Color3.fromRGB(0, 255, 170), -- Panda Green
+        Text = Color3.fromRGB(240, 240, 240),
+        Muted = Color3.fromRGB(120, 120, 120),
+        Font = Enum.Font.GothamBold,
+    }
+
+    local function getSafeParent()
+        if gethui then return gethui()
+        elseif game:GetService("CoreGui") then return game:GetService("CoreGui")
+        else return Player:WaitForChild("PlayerGui") end
+    end
+
+    local ParentTarget = getSafeParent()
+    for _, v in pairs(ParentTarget:GetChildren()) do
+        if v.Name == "PandazWare" then v:Destroy() end
+    end
+
+    local GUI = Instance.new("ScreenGui")
+    GUI.Name = "PandazWare"
+    GUI.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    GUI.ResetOnSpawn = false
+    GUI.IgnoreGuiInset = true
+    GUI.Parent = ParentTarget
+
+    local NotifContainer = Instance.new("Frame", GUI)
+    NotifContainer.Name = "Notifications"
+    NotifContainer.Position = UDim2.new(0.5, -125, 0.05, 0)
+    NotifContainer.Size = UDim2.new(0, 250, 0.8, 0)
+    NotifContainer.BackgroundTransparency = 1
+    local NotifList = Instance.new("UIListLayout", NotifContainer)
+    NotifList.SortOrder = Enum.SortOrder.LayoutOrder
+    NotifList.Padding = UDim.new(0, 8)
+    NotifList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    function PandazWare:Notify(title, text, duration)
+        local Frame = Instance.new("Frame", NotifContainer)
+        Frame.BackgroundColor3 = Theme.Main
+        Frame.Size = UDim2.new(1, 0, 0, 0)
+        Frame.ClipsDescendants = true
+        Instance.new("UICorner", Frame).CornerRadius = UDim.new(0, 6)
+        Instance.new("UIStroke", Frame).Color = Theme.Stroke
+        
+        local TTitle = Instance.new("TextLabel", Frame)
+        TTitle.Text = title or "PandazWare"
+        TTitle.Font = Theme.Font
+        TTitle.TextColor3 = Theme.Accent
+        TTitle.TextSize = 14
+        TTitle.Position = UDim2.new(0.05, 0, 0, 5)
+        TTitle.Size = UDim2.new(0.9, 0, 0, 20)
+        TTitle.BackgroundTransparency = 1
+        TTitle.TextXAlignment = Enum.TextXAlignment.Left
+        
+        local TDesc = Instance.new("TextLabel", Frame)
+        TDesc.Text = text or ""
+        TDesc.Font = Enum.Font.Gotham
+        TDesc.TextColor3 = Theme.Text
+        TDesc.TextSize = 12
+        TDesc.Position = UDim2.new(0.05, 0, 0, 25)
+        TDesc.Size = UDim2.new(0.9, 0, 1, -30)
+        TDesc.BackgroundTransparency = 1
+        TDesc.TextXAlignment = Enum.TextXAlignment.Left
+        TDesc.TextYAlignment = Enum.TextYAlignment.Top
+        TDesc.TextWrapped = true
+
+        local bounds = TextService:GetTextSize(TDesc.Text, 12, Enum.Font.Gotham, Vector2.new(225, 1000))
+        local targetHeight = math.clamp(bounds.Y + 35, 50, 150)
+        
+        TweenService:Create(Frame, TweenInfo.new(0.4, Enum.EasingStyle.Quint), {Size = UDim2.new(1,0,0,targetHeight)}):Play()
+        task.delay(duration or 3, function()
+            if Frame then
+                TweenService:Create(Frame, TweenInfo.new(0.4), {Size = UDim2.new(1,0,0,0), BackgroundTransparency = 1}):Play()
+                task.wait(0.4)
+                Frame:Destroy()
+            end
+        end)
+    end
+
+    local function MakeDraggable(gui, trigger)
+        local dragging, dragStart, startPos
+        local t = trigger or gui
+        t.InputBegan:Connect(function(input)
+            if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+                dragging = true
+                dragStart = input.Position
+                startPos = gui.Position
+                input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+            end
+        end)
+        t.InputChanged:Connect(function(input)
+            if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+                local delta = input.Position - dragStart
+                gui.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            end
+        end)
+    end
+
+    function PandazWare:MakeWindow(info)
+        local Window = {}
+        
+        local ToggleBtn = Instance.new("TextButton", GUI)
+        ToggleBtn.Name = "MobileButton"
+        ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+        ToggleBtn.Position = UDim2.new(0.02, 0, 0.2, 0)
+        ToggleBtn.BackgroundColor3 = Theme.Main
+        ToggleBtn.Text = "🐼"
+        ToggleBtn.TextSize = 20
+        Instance.new("UICorner", ToggleBtn).CornerRadius = UDim.new(1, 0)
+        Instance.new("UIStroke", ToggleBtn).Color = Theme.Accent
+        MakeDraggable(ToggleBtn)
+        
+        local Main = Instance.new("Frame", GUI)
+        Main.Name = "Main"
+        Main.Size = UDim2.new(0, 500, 0, 300)
+        Main.Position = UDim2.new(0.5, -250, 0.5, -150)
+        Main.BackgroundColor3 = Theme.Main
+        Main.Visible = true
+        Instance.new("UICorner", Main).CornerRadius = UDim.new(0, 6)
+        
+        ToggleBtn.MouseButton1Click:Connect(function() Main.Visible = not Main.Visible end)
+        
+        local Sidebar = Instance.new("Frame", Main)
+        Sidebar.Size = UDim2.new(0, 130, 1, 0)
+        Sidebar.BackgroundColor3 = Theme.Sidebar
+        Instance.new("UICorner", Sidebar).CornerRadius = UDim.new(0, 6)
+        
+        local TabHolder = Instance.new("ScrollingFrame", Sidebar)
+        TabHolder.Position = UDim2.new(0,0,0,45)
+        TabHolder.Size = UDim2.new(1,0,1,-45)
+        TabHolder.BackgroundTransparency = 1
+        TabHolder.ScrollBarThickness = 0
+        Instance.new("UIListLayout", TabHolder).Padding = UDim.new(0,4)
+        
+        local Content = Instance.new("Frame", Main)
+        Content.Position = UDim2.new(0, 135, 0, 0)
+        Content.Size = UDim2.new(1, -135, 1, 0)
+        Content.BackgroundTransparency = 1
+        
+        MakeDraggable(Main, Sidebar)
+        
+        local Tabs = {}
+        local FirstTab = true
+        
+        function Window:MakeTab(info)
+            local name = info.Name
+            local Tab = {}
+            local TabBtn = Instance.new("TextButton", TabHolder)
+            TabBtn.Size = UDim2.new(1, -10, 0, 30)
+            TabBtn.BackgroundTransparency = 1
+            TabBtn.Text = "  " .. name
+            TabBtn.TextColor3 = Theme.Muted
+            TabBtn.Font = Theme.Font
+            TabBtn.TextSize = 12
+            TabBtn.TextXAlignment = Enum.TextXAlignment.Left
+            Instance.new("UICorner", TabBtn).CornerRadius = UDim.new(0, 4)
+            
+            local Page = Instance.new("ScrollingFrame", Content)
+            Page.Size = UDim2.new(1, -10, 1, -10)
+            Page.Position = UDim2.new(0,0,0,5)
+            Page.BackgroundTransparency = 1
+            Page.ScrollBarThickness = 2
+            Page.Visible = false
+            local PageList = Instance.new("UIListLayout", Page)
+            PageList.Padding = UDim.new(0, 6)
+            PageList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+                Page.CanvasSize = UDim2.new(0,0,0, PageList.AbsoluteContentSize.Y + 20)
+            end)
+            
+            local function Activate()
+                for _, t in pairs(Tabs) do
+                    t.Page.Visible = false
+                    t.Btn.TextColor3 = Theme.Muted
+                    t.Btn.BackgroundTransparency = 1
+                end
+                Page.Visible = true
+                TabBtn.TextColor3 = Theme.Main
+                TabBtn.BackgroundColor3 = Theme.Accent
+                TabBtn.BackgroundTransparency = 0
+            end
+            TabBtn.MouseButton1Click:Connect(Activate)
+            table.insert(Tabs, {Btn = TabBtn, Page = Page})
+            if FirstTab then Activate(); FirstTab = false end
+            
+            function Tab:AddToggle(info)
+                local text = info.Name
+                local callback = info.Callback
+                local state = info.Default or false
+                
+                local TFrame = Instance.new("TextButton", Page)
+                TFrame.Size = UDim2.new(1, 0, 0, 36)
+                TFrame.BackgroundColor3 = Theme.Element
+                TFrame.Text = ""
+                Instance.new("UICorner", TFrame).CornerRadius = UDim.new(0, 4)
+                
+                local TText = Instance.new("TextLabel", TFrame)
+                TText.Text = text
+                TText.TextColor3 = Theme.Muted
+                TText.Font = Theme.Font
+                TText.TextSize = 12
+                TText.Size = UDim2.new(1, -40, 1, 0)
+                TText.Position = UDim2.new(0, 10, 0, 0)
+                TText.BackgroundTransparency = 1
+                TText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local Status = Instance.new("Frame", TFrame)
+                Status.Size = UDim2.new(0, 10, 0, 10)
+                Status.Position = UDim2.new(1, -20, 0.5, -5)
+                Status.BackgroundColor3 = state and Theme.Accent or Theme.Muted
+                Instance.new("UICorner", Status).CornerRadius = UDim.new(1, 0)
+                
+                local function Update()
+                    TweenService:Create(Status, TweenInfo.new(0.2), {BackgroundColor3 = state and Theme.Accent or Theme.Muted}):Play()
+                    TweenService:Create(TText, TweenInfo.new(0.2), {TextColor3 = state and Theme.Text or Theme.Muted}):Play()
+                    pcall(callback, state)
+                end
+                
+                TFrame.MouseButton1Click:Connect(function() state = not state; Update() end)
+                if state then Update() end
+            end
+            
+            function Tab:AddButton(info)
+                local text = info.Name
+                local callback = info.Callback
+                local BtnFrame = Instance.new("TextButton", Page)
+                BtnFrame.Size = UDim2.new(1, 0, 0, 32)
+                BtnFrame.BackgroundColor3 = Theme.Element
+                BtnFrame.Text = text
+                BtnFrame.TextColor3 = Theme.Text
+                BtnFrame.Font = Theme.Font
+                BtnFrame.TextSize = 12
+                Instance.new("UICorner", BtnFrame).CornerRadius = UDim.new(0, 4)
+                BtnFrame.MouseButton1Click:Connect(function() pcall(callback) end)
+            end
+
+            function Tab:AddSlider(info)
+                local text = info.Name
+                local min = info.Min
+                local max = info.Max
+                local default = info.Default
+                local callback = info.Callback
+                
+                local val = default or min
+                local SFrame = Instance.new("Frame", Page)
+                SFrame.Size = UDim2.new(1, 0, 0, 45)
+                SFrame.BackgroundColor3 = Theme.Element
+                Instance.new("UICorner", SFrame).CornerRadius = UDim.new(0, 4)
+                
+                local SText = Instance.new("TextLabel", SFrame)
+                SText.Text = text .. ": " .. val
+                SText.TextColor3 = Theme.Text
+                SText.Font = Theme.Font
+                SText.TextSize = 12
+                SText.Size = UDim2.new(1, -20, 0, 20)
+                SText.Position = UDim2.new(0, 10, 0, 2)
+                SText.BackgroundTransparency = 1
+                SText.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local Bar = Instance.new("TextButton", SFrame)
+                Bar.Size = UDim2.new(1, -20, 0, 6)
+                Bar.Position = UDim2.new(0, 10, 0, 28)
+                Bar.BackgroundColor3 = Theme.Main
+                Bar.Text = ""
+                Instance.new("UICorner", Bar).CornerRadius = UDim.new(1, 0)
+                
+                local Fill = Instance.new("Frame", Bar)
+                Fill.BackgroundColor3 = Theme.Accent
+                Fill.Size = UDim2.new((val - min) / (max - min), 0, 1, 0)
+                Instance.new("UICorner", Fill).CornerRadius = UDim.new(1, 0)
+                
+                local dragging = false
+                local function Update(input)
+                    local p = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
+                    val = math.floor(min + ((max - min) * p))
+                    SText.Text = text .. ": " .. val
+                    Fill.Size = UDim2.new(p, 0, 1, 0)
+                    pcall(callback, val)
+                end
+                
+                Bar.InputBegan:Connect(function(i) 
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = true; Update(i) end 
+                end)
+                UserInputService.InputEnded:Connect(function(i) 
+                    if i.UserInputType == Enum.UserInputType.MouseButton1 or i.UserInputType == Enum.UserInputType.Touch then dragging = false end 
+                end)
+                UserInputService.InputChanged:Connect(function(i) 
+                    if dragging and (i.UserInputType == Enum.UserInputType.MouseMovement or i.UserInputType == Enum.UserInputType.Touch) then Update(i) end 
+                end)
+            end
+
+            function Tab:AddSection(info)
+                local text = info.Name
+                local SecLabel = Instance.new("TextLabel", Page)
+                SecLabel.Text = text
+                SecLabel.TextColor3 = Theme.Accent
+                SecLabel.Font = Theme.Font
+                SecLabel.TextSize = 14
+                SecLabel.Size = UDim2.new(1, 0, 0, 25)
+                SecLabel.BackgroundTransparency = 1
+                SecLabel.TextXAlignment = Enum.TextXAlignment.Left
+            end
+
+            function Tab:AddDropdown(info)
+                local text = info.Name
+                local options = info.Options
+                local callback = info.Callback
+                local default = info.Default
+                
+                local expanded = false
+                local selected = default or options[1]
+                local Container = Instance.new("Frame", Page)
+                Container.Size = UDim2.new(1, 0, 0, 36)
+                Container.BackgroundColor3 = Theme.Element
+                Container.ClipsDescendants = true
+                Instance.new("UICorner", Container).CornerRadius = UDim.new(0, 4)
+                
+                local Header = Instance.new("TextButton", Container)
+                Header.Size = UDim2.new(1, 0, 0, 36)
+                Header.BackgroundTransparency = 1
+                Header.Text = ""
+                
+                local Title = Instance.new("TextLabel", Header)
+                Title.Text = text .. ": " .. tostring(selected)
+                Title.TextColor3 = Theme.Text
+                Title.Font = Theme.Font
+                Title.TextSize = 12
+                Title.Position = UDim2.new(0, 10, 0, 0)
+                Title.Size = UDim2.new(1, -30, 1, 0)
+                Title.BackgroundTransparency = 1
+                Title.TextXAlignment = Enum.TextXAlignment.Left
+
+                local function Refresh()
+                    for _, v in pairs(Container:GetChildren()) do if v:IsA("TextButton") and v ~= Header then v:Destroy() end end
+                    if expanded then
+                        for i, opt in pairs(options) do
+                            local OptBtn = Instance.new("TextButton", Container)
+                            OptBtn.Size = UDim2.new(1, -10, 0, 25)
+                            OptBtn.BackgroundColor3 = Theme.Main
+                            OptBtn.Text = tostring(opt)
+                            OptBtn.TextColor3 = Theme.Muted
+                            OptBtn.Font = Theme.Font
+                            OptBtn.TextSize = 11
+                            OptBtn.LayoutOrder = i
+                            Instance.new("UICorner", OptBtn).CornerRadius = UDim.new(0, 4)
+                            OptBtn.MouseButton1Click:Connect(function()
+                                selected = opt
+                                Title.Text = text .. ": " .. tostring(selected)
+                                expanded = false
+                                TweenService:Create(Container, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 36)}):Play()
+                                pcall(callback, selected)
+                            end)
+                        end
+                        TweenService:Create(Container, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 36 + (#options * 27) + 5)}):Play()
+                    else
+                        TweenService:Create(Container, TweenInfo.new(0.3), {Size = UDim2.new(1, 0, 0, 36)}):Play()
+                    end
+                end
+                Header.MouseButton1Click:Connect(function() expanded = not expanded; Refresh() end)
+            end
+
+            return Tab
+        end
+        return Window
+    end
+    return PandazWare
+end)()
+
+-- [2] VARIABLES & SETTINGS --
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local ESP_LIB = loadstring(game:HttpGet("https://raw.githubusercontent.com/linemaster2/esp-library/main/library.lua"))()
+
+local Settings = {
+    Aimbot = false,
+    Wallbang = false,
+    FOV = 150,
+    HitPart = "Head",
+    ShowFOV = true,
+    TeamCheck = true,
+    Speed = 16
+}
+
+local Window = Library:MakeWindow({Name = "Rivals Mobile Ultimate"})
+
+-- [3] AIMBOT LOGIC (MOBILE / CFRAME) --
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Color = Color3.fromRGB(255, 0, 0)
+FOVCircle.Thickness = 2
+FOVCircle.Radius = Settings.FOV
+FOVCircle.Filled = false
+FOVCircle.Visible = false
+FOVCircle.NumSides = 64
+
+local LockedTarget = nil
+
+local function GetClosestTarget()
+      -- Sticky Check (Bleib beim Ziel wenn noch gut)
+    if LockedTarget and LockedTarget.Parent and LockedTarget.Parent:FindFirstChild("Humanoid") and LockedTarget.Parent.Humanoid.Health > 0 then
+        local pos, onScreen = Camera:WorldToViewportPoint(LockedTarget.Position)
+        if onScreen then return LockedTarget end
+    end
+
+    local closest = nil
+    local shortestDist = Settings.FOV
+    local center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+
+    for _, player in pairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer and player.Character and player.Character:FindFirstChild(Settings.HitPart) and player.Character:FindFirstChild("Humanoid") and player.Character.Humanoid.Health > 0 then
+            if not Settings.TeamCheck or player.Team ~= LocalPlayer.Team then
+                local part = player.Character[Settings.HitPart]
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
+                if onScreen then
+                    local dist = (center - Vector2.new(pos.X, pos.Y)).Magnitude
+                    if dist < shortestDist then
+                        -- Wallbang Logic
+                        local canSee = true
+                        if not Settings.Wallbang then
+                            local params = RaycastParams.new()
+                            params.FilterDescendantsInstances = {LocalPlayer.Character, Camera}
+                            params.FilterType = Enum.RaycastFilterType.Exclude
+                            local dir = (part.Position - Camera.CFrame.Position)
+                            local ray = workspace:Raycast(Camera.CFrame.Position, dir.Unit * dir.Magnitude, params)
+                            if ray and ray.Instance and not ray.Instance:IsDescendantOf(player.Character) then
+                                canSee = false
+                            end
+                        end
+                        if canSee then
+                            shortestDist = dist
+                            closest = part
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return closest
+end
+
+-- [4] UI TABS --
+local Combat = Window:MakeTab({Name = "Combat"})
+local Visuals = Window:MakeTab({Name = "Visuals"})
+local Misc = Window:MakeTab({Name = "Misc"})
+
+-- COMBAT
+Combat:AddSection({Name = "Rage Aimbot"})
+Combat:AddToggle({Name = "Enable Hard Lock", Default = false, Callback = function(v) 
+    Settings.Aimbot = v 
+    if not v then LockedTarget = nil end
+end})
+Combat:AddToggle({Name = "Wallbang (Shoot Through Walls)", Default = false, Callback = function(v) 
+    Settings.Wallbang = v 
+    FOVCircle.Color = v and Color3.fromRGB(255, 0, 0) or Color3.fromRGB(0, 255, 0)
+end})
+Combat:AddDropdown({Name = "Hit Part", Options = {"Head", "HumanoidRootPart"}, Default = "Head", Callback = function(v) Settings.HitPart = v end})
+
+-- VISUALS
+Visuals:AddSection({Name = "ESP & FOV"})
+Visuals:AddToggle({Name = "ESP Enabled", Default = false, Callback = function(v) ESP_LIB.Enabled = v; ESP_LIB.ShowBox = v; ESP_LIB.ShowName = v end})
+Visuals:AddToggle({Name = "Show FOV Circle", Default = false, Callback = function(v) Settings.ShowFOV = v end})
+Visuals:AddSlider({Name = "FOV Radius", Min = 50, Max = 800, Default = 150, Callback = function(v) Settings.FOV = v; FOVCircle.Radius = v end})
+
+-- MISC
+Misc:AddSection({Name = "Exploits"})
+Misc:AddButton({Name = "Apply Gun Mods (No Recoil)", Callback = function()
+    pcall(function()
+        for _, v in pairs(debug.getregistry()) do
+            if type(v) == "table" then
+                if rawget(v, "ShootCooldown") then v.ShootCooldown = 0.05 end
+                if rawget(v, "ShootSpread") then v.ShootSpread = 0 end
+                if rawget(v, "ShootRecoil") then v.ShootRecoil = 0 end
+            end
+        end
+    end)
+    Library:Notify("Success", "Gun Mods Applied!", 3)
+end})
+Misc:AddSlider({Name = "WalkSpeed", Min = 16, Max = 100, Default = 16, Callback = function(v) Settings.Speed = v end})
+
+-- [5] MAIN LOOPS --
+RunService.RenderStepped:Connect(function()
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
+    FOVCircle.Visible = Settings.ShowFOV
+
+    -- Aimbot Lock
+    if Settings.Aimbot then
+        LockedTarget = GetClosestTarget()
+        if LockedTarget then
+            Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.Position)
+        end
+    end
+
+    -- Speed Loop
+    if Settings.Speed > 16 and LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("Humanoid") then
+        LocalPlayer.Character.Humanoid.WalkSpeed = Settings.Speed
+    end
+end)
+
+-- [6] WALLBANG HOOK --
+local oldNamecall
+oldNamecall = hookmetamethod(game, "__namecall", function(self, ...)
+    local method = getnamecallmethod()
+    if method == "FireServer" and self.Name == "UseItem" and Settings.Aimbot and LockedTarget then
+        Camera.CFrame = CFrame.new(Camera.CFrame.Position, LockedTarget.Position)
+    end
+    return oldNamecall(self, ...)
+end)
